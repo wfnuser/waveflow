@@ -17,11 +17,13 @@ def get_features(wav_path):
 
 
 def main():
-
-    wav_path = "/Users/mc/Documents/Study/zhangya's lab/data/vcc2016+2018/vcc2018_training/VCC2SF1/10001.wav"
+    wav_path = "/DATA2/data/qhhuang/vcc/vcc2018_training/VCC2SF1/10001.wav"
+#    wav_path = "/Users/mc/Documents/Study/zhangya's lab/data/vcc2016+2018/vcc2018_training/VCC2SF1/10001.wav"
     mc, aperiodicity, f0 = get_features(wav_path)
 
-    mc = mc.squeeze(0).data.numpy()
+    print(mc.shape)
+    print(f0.shape)
+    print(aperiodicity.shape)
 
     spectrogram = pysptk.mc2sp(
         mc.astype(np.float64), alpha=config.alpha, fftlen=config.fftlen)
