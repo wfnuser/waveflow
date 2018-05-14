@@ -7,6 +7,7 @@ import soundfile as sf
 import pyworld as pw
 import tensorflow as tf
 from config import *
+import random
 
 args = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('dir_to_wav', './dataset/vcc2016/wav', 'Dir to *.wav')
@@ -106,58 +107,59 @@ def extract_and_save_bin_to(dir_to_bin, dir_to_source):
                         fp.write(features.tostring())
 
 
-def read(
-    file_pattern,
-    batch_size,
-    record_bytes=RECORD_BYTES,
-    capacity=256,
-    min_after_dequeue=128,
-    num_threads=8,
-    normalizer=None,
-    ):
-    '''
-    Read only `sp` and `speaker`
-    Return:
-        `feature`: [b, c]
-        `speaker`: [b,]
-    '''
-    with tf.name_scope('InputSpectralFrame'):
-        files = tf.gfile.Glob(file_pattern)
-        filename_queue = tf.train.string_input_producer(files)
+def get_files_and_que(file_pattern):
+    files = tf.gfile.Glob(file_pattern)
+    random.shuffle(files)
+    filename_queue = tf.train.string_input_producer(files)
 
+    return files, filename_queue
 
-        reader = tf.FixedLengthRecordReader(record_bytes)
-        _, value = reader.read(filename_queue)
-        value = tf.decode_raw(value, tf.float32)
+def get_batch(files, offset, batch_size):
+    batch_files = [files[i % len(files)] for i in range(offset * batch_size, (offset+1) * batch_size)]
+    batch_x = []
+    batch_y = []
+    for file in batch_files:
+        features = read_features_from_file(file)
 
-        value = tf.reshape(value, [FEAT_DIM,])
-        feature = value[:SP_DIM]
+        sp = features['sp']
+        sp = np.pad(sp, ((0,2500-sp.shape[0]),(0,0)), "constant", constant_values=0)
+        label = np.zeros(10)
+        np.put(label,int(features['label'][0]),1)
 
-        if normalizer is not None:
-            feature = normalizer.forward_process(feature)
+        batch_x.append(sp)
+        batch_y.append(label)
 
-        feature = tf.reshape(feature, [1, SP_DIM, 1])
+    return np.asarray(batch_x), np.asarray(batch_y)
 
-        speaker = tf.cast(value[-1], tf.int64)
-        return tf.train.shuffle_batch(
-            [feature, speaker],
-            batch_size,
-            capacity=capacity,
-            min_after_dequeue=min_after_dequeue,
-            num_threads=num_threads,
-        )
 
 def main():
+    file_pattern = "./dataset/vcc2016/bin/Training Set/SF3/1000*.bin"
+    files, filename_queque = get_files_and_que(file_pattern)
+
+    for file in files:
+        features = read_features_from_file(file)
+        print(features['label'][0])
+
+
+
     # extract_and_save_bin_to(
     #     args.dir_to_bin,
     #     args.dir_to_wav,
     # )
 
-    f = './dataset/vcc2016/bin/Training Set/SF1/100001.bin'
-    features = read_features_from_file(f)
+    # f = './dataset/vcc2016/bin/Training Set/SF1/100001.bin'
+    # features = read_features_from_file(f)
+    #
+    # y = pw2wav(features)
+    # sf.write('test2.wav', y, 16000)
 
-    y = pw2wav(features)
-    sf.write('test2.wav', y, 16000)
+    # file_pattern = "./dataset/vcc2016/bin/Training Set/*/1000*.bin"
+    # batch_size = 16
+    # files, filename_queue = get_files_and_que(file_pattern)
+    #
+    # for i in range(0, len(files) / batch_size + 1):
+    #     batch_x, batch_y = get_batch(files, i, batch_size)
+    #     print(batch_y)
 
 
 if __name__ == '__main__':

@@ -1,8 +1,8 @@
 # Training Parameters
-learning_rate = 0.001
+learning_rate = 0.0001
 training_steps = 10000
-batch_size = 128
-display_step = 200
+batch_size = 16
+display_step = 5
 
 # Network Parameters
 timesteps = 28 # timesteps
