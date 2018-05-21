@@ -118,22 +118,30 @@ def get_batch(files, offset, batch_size):
     batch_files = [files[i % len(files)] for i in range(offset * batch_size, (offset+1) * batch_size)]
     batch_x = []
     batch_y = []
+    length = 0
+    # TODO: optimize the logic following
+    for file in batch_files:
+        features = read_features_from_file(file)
+        sp = features['sp']
+        if (length < sp.shape[0]):
+            length = sp.shape[0]
+
     for file in batch_files:
         features = read_features_from_file(file)
 
         sp = features['sp']
-        sp = np.pad(sp, ((0,2500-sp.shape[0]),(0,0)), "constant", constant_values=0)
+        sp = np.pad(sp, ((0,length-sp.shape[0]),(0,0)), "constant", constant_values=0)
         label = np.zeros(10)
         np.put(label,int(features['label'][0]),1)
 
         batch_x.append(sp)
         batch_y.append(label)
 
-    return np.asarray(batch_x), np.asarray(batch_y)
+    return np.asarray(batch_x), np.asarray(batch_y), length
 
 
 def main():
-    file_pattern = "./dataset/vcc2016/bin/Training Set/SF3/1000*.bin"
+    file_pattern = "./dataset/vcc2016/bin/Training Set/SF1/1000*.bin"
     files, filename_queque = get_files_and_que(file_pattern)
 
     for file in files:

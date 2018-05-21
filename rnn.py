@@ -19,8 +19,9 @@ def RNN(x):
     print("initialize cost: ", time.clock()- start)
     # Unstack to get a list of 'timesteps' tensors of shape (batch_size, n_input)
 
-    x = tf.unstack(x, 2500, 1)
-    print("initialize unstack: ", time.clock()- start)
+
+    # x = tf.unstack(x[:,500:600,:], 100, 1)
+    # print("initialize unstack: ", time.clock()- start)
 
 
     # Define a lstm cell with tensorflow
@@ -28,8 +29,9 @@ def RNN(x):
     print("initialize lstm: ", time.clock()- start)
 
     # Get lstm cell output
-    outputs, states = rnn.static_rnn(lstm_cell, x, dtype=tf.float32)
-    print("initialize static_rcc: ", time.clock()- start)
+    outputs, states = tf.nn.dynamic_rnn(lstm_cell, x, dtype=tf.float32)
+    print(outputs)
+    print("initialize dynamic_rnn: ", time.clock()- start)
 
     # Linear activation, using rnn inner loop last output
-    return tf.matmul(outputs[-1], weights['out']) + biases['out']
+    return tf.matmul(outputs[:,-1], weights['out']) + biases['out']

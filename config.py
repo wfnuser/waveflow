@@ -1,13 +1,13 @@
 # Training Parameters
-learning_rate = 0.0001
+learning_rate = 0.001
 training_steps = 10000
-batch_size = 16
+batch_size = 64
 display_step = 5
 
 # Network Parameters
-timesteps = 28 # timesteps
 num_hidden = 128 # hidden layer num of features
-num_classes = 10 # MNIST total classes (0-9 digits)
+num_classes = 10
+truncated_backprop_length = 50
 
 EPSILON = 1e-10
 SETS = ['Training Set', 'Testing Set']
