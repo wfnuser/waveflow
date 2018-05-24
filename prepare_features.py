@@ -10,12 +10,12 @@ from config import *
 import random
 
 args = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_string('dir_to_wav', './dataset/vcc2016/wav', 'Dir to *.wav')
-tf.app.flags.DEFINE_string('dir_to_bin', './dataset/vcc2016/bin', 'Dir to output *.bin')
+tf.app.flags.DEFINE_string('dir_to_wav', '/DATA2/data/qhhuang/music', 'Dir to *.wav')
+tf.app.flags.DEFINE_string('dir_to_bin', '/DATA2/data/qhhuang/musicbin', 'Dir to output *.bin')
 tf.app.flags.DEFINE_integer('fs', 16000, 'Global sampling frequency')
 tf.app.flags.DEFINE_float('f0_ceil', 500, 'Global f0 ceiling')
 
-SPEAKERS = [s.strip() for s in tf.gfile.GFile('./etc/speakers.tsv', 'r').readlines()]
+INSTRUMENTS = ['piano', 'dull_bell']
 
 def read_features_from_file(f):
     features = np.fromfile(f, np.float32)
@@ -26,7 +26,7 @@ def read_features_from_file(f):
         'f0': features[:, SP_DIM * 2],
         'en': features[:, SP_DIM * 2 + 1],
         'label': features[:, SP_DIM * 2 + 2],
-        'feature': features[:, :SP_DIM * 2 + 1],
+        'feature': features[:, :SP_DIM * 2 + 2],
         'filename': f,
     }
 
@@ -83,13 +83,11 @@ def extract(filename, fft_size=FFT_SIZE, dtype=np.float32):
 
 
 def extract_and_save_bin_to(dir_to_bin, dir_to_source):
-    sets = [s for s in os.listdir(dir_to_source) if s in SETS]
-    for d in sets:
-        path = join(dir_to_source, d)
-        speakers = [s for s in os.listdir(path) if s in SPEAKERS]
-        for s in speakers:
-            path = join(dir_to_source, d, s)
-            output_dir = join(dir_to_bin, d, s)
+        path = join(dir_to_source)
+        instruments = [s for s in os.listdir(path) if s in INSTRUMENTS]
+        for s in instruments:
+            path = join(dir_to_source, s)
+            output_dir = join(dir_to_bin, s)
             if not tf.gfile.Exists(output_dir):
                 tf.gfile.MakeDirs(output_dir)
             for f in os.listdir(path):
@@ -97,11 +95,12 @@ def extract_and_save_bin_to(dir_to_bin, dir_to_source):
                 print(filename)
                 if not os.path.isdir(filename):
                     features = extract(filename)
-                    labels = SPEAKERS.index(s) * np.ones(
+                    labels = INSTRUMENTS.index(s) * np.ones(
                         [features.shape[0], 1],
                         np.float32,
                     )
                     b = os.path.splitext(f)[0]
+                    print(b)
                     features = np.concatenate([features, labels], 1)
                     with open(join(output_dir, '{}.bin'.format(b)), 'wb') as fp:
                         fp.write(features.tostring())
@@ -114,39 +113,71 @@ def get_files_and_que(file_pattern):
 
     return files, filename_queue
 
-def get_batch(files, offset, batch_size):
-    batch_files = [files[i % len(files)] for i in range(offset * batch_size, (offset+1) * batch_size)]
-    batch_x = []
-    batch_y = []
-    length = 0
+def get_batch(seq, content_dir, style_dir, target_dir, offset, batch_size):
+    batch_seq = [seq[i % len(seq)] for i in range(offset * batch_size, (offset+1) * batch_size)]
+    batch_s = []
+    batch_c = []
+    batch_t = []
+    length = {
+        's': 0,
+        'c': 0,
+        't': 0
+    }
+
     # TODO: optimize the logic following
-    for file in batch_files:
+    for each in batch_seq:
+        file = join(content_dir, str(each+30)+'.bin')
         features = read_features_from_file(file)
         sp = features['sp']
-        if (length < sp.shape[0]):
-            length = sp.shape[0]
-
-    for file in batch_files:
+        if (length['c'] < sp.shape[0]):
+            length['c'] = sp.shape[0]
+    # TODO: remove hard code 30 here
+    for each in batch_seq:
+        file = join(style_dir, str(each)+'.bin')
         features = read_features_from_file(file)
-
         sp = features['sp']
-        sp = np.pad(sp, ((0,length-sp.shape[0]),(0,0)), "constant", constant_values=0)
-        label = np.zeros(10)
-        np.put(label,int(features['label'][0]),1)
+        if (length['s'] < sp.shape[0]):
+            length['s'] = sp.shape[0]
+    for each in batch_seq:
+        file = join(target_dir, str(each+30)+'.bin')
+        features = read_features_from_file(file)
+        sp = features['sp']
+        if (length['t'] < sp.shape[0]):
+            length['t'] = sp.shape[0]
 
-        batch_x.append(sp)
-        batch_y.append(label)
 
-    return np.asarray(batch_x), np.asarray(batch_y), length
+
+    for each in batch_seq:
+        c_file = join(content_dir, str(each+30)+'.bin')
+        s_file = join(style_dir, str(each)+'.bin')
+        t_file = join(target_dir, str(each+30)+'.bin')
+
+        s = read_features_from_file(s_file)
+        c = read_features_from_file(c_file)
+        t = read_features_from_file(t_file)
+
+        sp = s['feature']
+        sp = np.pad(sp, ((0,length['s']-sp.shape[0]),(0,0)), "constant", constant_values=0)
+        batch_s.append(sp)
+
+        sp = c['feature']
+        sp = np.pad(sp, ((0,length['c']-sp.shape[0]),(0,0)), "constant", constant_values=0)
+        batch_c.append(sp)
+
+        sp = t['feature']
+        sp = np.pad(sp, ((0,length['t']-sp.shape[0]),(0,0)), "constant", constant_values=0)
+        batch_t.append(sp)
+
+    return np.asarray(batch_c), np.asarray(batch_s), np.asarray(batch_t), length
 
 
 def main():
-    file_pattern = "./dataset/vcc2016/bin/Training Set/SF1/1000*.bin"
-    files, filename_queque = get_files_and_que(file_pattern)
-
-    for file in files:
-        features = read_features_from_file(file)
-        print(features['label'][0])
+    # file_pattern = "./dataset/vcc2016/bin/Training Set/SF1/1000*.bin"
+    # files, filename_queque = get_files_and_que(file_pattern)
+    #
+    # for file in files:
+    #     features = read_features_from_file(file)
+    #     print(features['label'][0])
 
 
 
@@ -155,19 +186,23 @@ def main():
     #     args.dir_to_wav,
     # )
 
-    # f = './dataset/vcc2016/bin/Training Set/SF1/100001.bin'
+    # f = '../../musicbin/dull_bell/dull_bell.bin'
     # features = read_features_from_file(f)
     #
     # y = pw2wav(features)
-    # sf.write('test2.wav', y, 16000)
+    # sf.write('dull_bell0.wav', y, 16000)
 
-    # file_pattern = "./dataset/vcc2016/bin/Training Set/*/1000*.bin"
-    # batch_size = 16
-    # files, filename_queue = get_files_and_que(file_pattern)
-    #
-    # for i in range(0, len(files) / batch_size + 1):
-    #     batch_x, batch_y = get_batch(files, i, batch_size)
-    #     print(batch_y)
+    style_dir = "../../musicbin/training_data/dull_bell/"
+    content_dir = "../../musicbin/training_data/piano/"
+    target_dir = "../../musicbin/training_data/target/"
+    seq = range(30)
+    random.shuffle(seq)
+    print(seq)
+
+    for i in range(0, len(seq) / batch_size + 1):
+        batch_s, batch_c, batch_t, length = get_batch(seq, content_dir, style_dir, target_dir, i, batch_size)
+        print(batch_s.shape)
+        print(length)
 
 
 if __name__ == '__main__':
